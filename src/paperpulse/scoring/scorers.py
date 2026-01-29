@@ -54,8 +54,11 @@ class SemanticScorer(BaseScorer):
         # Calculate cosine similarity
         similarity = cosine_similarity(paper_embedding, profile_embedding)
 
-        # Normalize to 0-1 range (cosine similarity is already -1 to 1, but embeddings are usually positive)
-        score = max(0.0, min(1.0, similarity))
+        # Scale up similarity for better differentiation
+        # Mock/deterministic embeddings typically produce low similarities (0.1-0.4)
+        # Scale to expand this range: 0.1 -> 0.25, 0.2 -> 0.5, 0.3 -> 0.75, 0.4 -> 1.0
+        scaled_similarity = min(1.0, max(0.0, similarity) * 2.5)
+        score = max(0.0, min(1.0, scaled_similarity))
 
         return ScoreResult(
             scorer_name=self.name,
@@ -63,6 +66,7 @@ class SemanticScorer(BaseScorer):
             weight=self.default_weight,
             details={
                 "cosine_similarity": similarity,
+                "scaled_similarity": scaled_similarity,
                 "paper_has_abstract": context.paper_abstract is not None,
             },
         )
@@ -111,15 +115,20 @@ class KeywordScorer(BaseScorer):
             if re.search(pattern, text):
                 excluded_matches.append(excluded)
 
-        # Calculate score
+        # Calculate score using square root scaling for better partial match rewards
+        # This makes 3/7 keywords = 0.65 instead of 0.43, rewarding partial matches more
         if context.profile_keywords:
             match_ratio = len(matched_keywords) / len(context.profile_keywords)
+            # Square root scaling: sqrt(ratio) gives higher scores for partial matches
+            # 1 keyword of 7 = 0.38, 2/7 = 0.53, 3/7 = 0.65, 4/7 = 0.76, 5/7 = 0.85
+            import math
+            scaled_ratio = math.sqrt(match_ratio)
         else:
-            match_ratio = 0.0
+            scaled_ratio = 0.0
 
         # Apply penalty for excluded keywords
         exclusion_penalty = min(0.5, len(excluded_matches) * 0.2)
-        score = max(0.0, match_ratio - exclusion_penalty)
+        score = max(0.0, scaled_ratio - exclusion_penalty)
 
         return ScoreResult(
             scorer_name=self.name,

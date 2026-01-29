@@ -58,7 +58,7 @@ async def collect_real_papers():
     for query in queries:
         try:
             console.print(f"  Searching: {query}")
-            papers = await arxiv.search_papers(query, limit=10)
+            papers = await arxiv.search_papers(query, limit=15, days_back=30)
             all_papers.extend(papers)
             console.print(f"    Found {len(papers)} papers")
         except Exception as e:
@@ -82,7 +82,7 @@ async def collect_real_papers():
     for query in pubmed_queries:
         try:
             console.print(f"  Searching: {query}")
-            papers = await pubmed.search_papers(query, limit=10)
+            papers = await pubmed.search_papers(query, limit=15, days_back=30)
             all_papers.extend(papers)
             console.print(f"    Found {len(papers)} papers")
         except Exception as e:
@@ -147,11 +147,11 @@ async def send_real_digest(papers, user_email: str):
 
     console.print(f"[green]Digest generated: {digest.total_papers} papers[/green]")
 
-    # Show what we're sending
+    # Show what we're sending with score details
     for section in digest.sections:
         console.print(f"\n[bold]{section.interest_name}[/bold]: {len(section.papers)} papers")
-        for p in section.papers[:3]:
-            console.print(f"  • {p.title[:60]}... ({p.score_percent}%)")
+        for p in section.papers[:5]:
+            console.print(f"  • {p.title[:55]}... [cyan]{p.score_percent}%[/cyan]")
 
     # Render and send
     renderer = DigestRenderer()
