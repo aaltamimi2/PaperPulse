@@ -71,6 +71,14 @@ class DigestSection:
 
 
 @dataclass
+class SuggestedAuthor:
+    """An author suggested to follow."""
+    name: str
+    paper_count: int
+    sample_paper: Optional[str] = None
+
+
+@dataclass
 class Digest:
     """Complete email digest with multiple interest sections."""
 
@@ -89,6 +97,10 @@ class Digest:
     # Metadata
     total_papers: int = 0
     total_new_papers: int = 0
+
+    # Author tracking
+    followed_authors: list[str] = field(default_factory=list)
+    suggested_authors: list[SuggestedAuthor] = field(default_factory=list)
 
     @property
     def has_content(self) -> bool:

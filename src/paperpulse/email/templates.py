@@ -305,6 +305,77 @@ DIGEST_HTML_TEMPLATE = """
         .paper-cta:hover {
             background: #4338ca;
         }
+        .authors-section {
+            padding: 24px 30px;
+            background: #f8fafc;
+        }
+        .authors-box {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            border: 1px solid #e2e8f0;
+        }
+        .authors-box.suggested {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-color: #fbbf24;
+        }
+        .authors-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 12px;
+        }
+        .authors-subtitle {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 12px;
+        }
+        .authors-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .author-tag {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .author-tag.followed {
+            background: #e0e7ff;
+            color: #4338ca;
+        }
+        .author-more {
+            padding: 6px 12px;
+            color: #64748b;
+            font-size: 13px;
+        }
+        .suggested-authors {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .suggested-author {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.7);
+            border-radius: 8px;
+        }
+        .suggested-name {
+            font-weight: 600;
+            color: #1e293b;
+        }
+        .suggested-count {
+            font-size: 12px;
+            color: #92400e;
+            background: rgba(146, 64, 14, 0.1);
+            padding: 4px 8px;
+            border-radius: 12px;
+        }
         .footer {
             background: #1e293b;
             padding: 32px 30px;
@@ -469,6 +540,39 @@ DIGEST_HTML_TEMPLATE = """
             </div>
             {% endfor %}
         </div>
+
+        {% if digest.followed_authors or digest.suggested_authors %}
+        <div class="authors-section">
+            {% if digest.followed_authors %}
+            <div class="authors-box">
+                <h3 class="authors-title">👥 Authors You Follow</h3>
+                <div class="authors-list">
+                    {% for author in digest.followed_authors[:6] %}
+                    <span class="author-tag followed">{{ author }}</span>
+                    {% endfor %}
+                    {% if digest.followed_authors|length > 6 %}
+                    <span class="author-more">+{{ digest.followed_authors|length - 6 }} more</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if digest.suggested_authors %}
+            <div class="authors-box suggested">
+                <h3 class="authors-title">✨ Suggested Authors to Follow</h3>
+                <p class="authors-subtitle">Based on your highly-relevant papers</p>
+                <div class="suggested-authors">
+                    {% for author in digest.suggested_authors %}
+                    <div class="suggested-author">
+                        <span class="suggested-name">{{ author.name }}</span>
+                        <span class="suggested-count">{{ author.paper_count }} paper{% if author.paper_count > 1 %}s{% endif %}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
 
         <div class="footer">
             <p class="footer-text">

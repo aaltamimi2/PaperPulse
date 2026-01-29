@@ -18,6 +18,7 @@ from rich.console import Console
 
 from paperpulse.collectors import ArxivCollector, PubMedCollector
 from paperpulse.email import DigestRenderer, DigestService, ResearchInterest
+from paperpulse.email.models import SuggestedAuthor
 
 console = Console()
 
@@ -158,14 +159,13 @@ async def send_real_digest(papers, user_email: str):
 
     console.print(f"\n[bold cyan]Generating AI-enhanced digest...[/bold cyan]")
 
-    # NOTE: Set mock_mode=False once you have a valid Gemini API key
-    # Current key was leaked and needs replacement from: https://makersuite.google.com/app/apikey
-    use_real_embeddings = os.environ.get("USE_REAL_EMBEDDINGS", "false").lower() == "true"
+    # Use real Gemini API for embeddings and summaries
+    use_real_ai = os.environ.get("USE_REAL_EMBEDDINGS", "true").lower() == "true"
 
     service = DigestService(
-        mock_mode=not use_real_embeddings,  # Toggle with USE_REAL_EMBEDDINGS=true
-        enable_ai_summaries=not use_real_embeddings,  # AI summaries need valid key too
-        max_papers_to_summarize=10,
+        mock_mode=not use_real_ai,  # Real embeddings when USE_REAL_EMBEDDINGS=true
+        enable_ai_summaries=use_real_ai,  # Real AI summaries when USE_REAL_EMBEDDINGS=true
+        max_papers_to_summarize=5,
     )
 
     digest = await service.generate_digest(
@@ -180,30 +180,40 @@ async def send_real_digest(papers, user_email: str):
 
     console.print(f"[green]Digest generated: {digest.total_papers} papers[/green]")
 
-    # Show what we're sending with score details
-    for section in digest.sections:
-        console.print(f"\n[bold]{section.interest_name}[/bold]: {len(section.papers)} papers")
-        for p in section.papers[:5]:
-            console.print(f"  • {p.title[:55]}... [cyan]{p.score_percent}%[/cyan]")
+    # Add followed authors to digest
+    digest.followed_authors = FOLLOWED_AUTHORS
 
-    # Suggest authors to follow (authors from highly-scored papers not already followed)
-    console.print(f"\n[bold yellow]📝 Suggested Authors to Follow:[/bold yellow]")
+    # Generate suggested authors (from highly-scored papers not already followed)
     author_counts = {}
+    author_papers = {}
     for section in digest.sections:
         for p in section.papers:
             if p.relevance_score >= 0.4:  # Only from relevant papers
                 for author in (p.authors or [])[:3]:  # First 3 authors per paper
-                    # Check if not already followed
                     author_lower = author.lower()
                     already_followed = any(f.lower() in author_lower or author_lower in f.lower()
                                           for f in FOLLOWED_AUTHORS)
                     if not already_followed:
                         author_counts[author] = author_counts.get(author, 0) + 1
+                        if author not in author_papers:
+                            author_papers[author] = p.title
 
-    # Show top suggested authors
-    suggested = sorted(author_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-    for author, count in suggested:
-        console.print(f"  • {author} (appears in {count} relevant papers)")
+    # Add top suggested authors to digest
+    suggested = sorted(author_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+    digest.suggested_authors = [
+        SuggestedAuthor(name=author, paper_count=count, sample_paper=author_papers.get(author))
+        for author, count in suggested
+    ]
+
+    # Show what we're sending
+    for section in digest.sections:
+        console.print(f"\n[bold]{section.interest_name}[/bold]: {len(section.papers)} papers")
+        for p in section.papers[:3]:
+            console.print(f"  • {p.title[:55]}... [cyan]{p.score_percent}%[/cyan]")
+
+    console.print(f"\n[bold yellow]📝 Suggested Authors:[/bold yellow]")
+    for sa in digest.suggested_authors:
+        console.print(f"  • {sa.name} ({sa.paper_count} papers)")
 
     # Render and send
     renderer = DigestRenderer()
