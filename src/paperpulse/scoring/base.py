@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Optional
 
 
@@ -16,6 +17,14 @@ class ScoringContext:
     paper_journal: Optional[str] = None
     paper_embedding: Optional[list[float]] = None
 
+    # Paper metadata (Phase 2: Enhanced metrics)
+    paper_published_date: Optional[datetime] = None
+    paper_year: Optional[int] = None
+    paper_citation_count: Optional[int] = None
+    paper_influential_citation_count: Optional[int] = None
+    paper_fields_of_study: list[str] = field(default_factory=list)
+    paper_venue: Optional[str] = None
+
     # Profile information
     profile_name: str = ""
     profile_description: Optional[str] = None
@@ -24,6 +33,7 @@ class ScoringContext:
     profile_followed_authors: list[str] = field(default_factory=list)
     profile_followed_journals: list[str] = field(default_factory=list)
     profile_embedding: Optional[list[float]] = None
+    profile_fields_of_study: list[str] = field(default_factory=list)
 
 
 @dataclass

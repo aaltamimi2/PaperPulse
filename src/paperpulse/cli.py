@@ -259,6 +259,264 @@ def init_database() -> None:
     asyncio.run(_init())
 
 
+# API commands (Phase 3)
+api_app = typer.Typer(help="API server operations")
+app.add_typer(api_app, name="api")
+
+
+@api_app.command("serve")
+def serve_api(
+    host: str = typer.Option("0.0.0.0", "--host", "-h", help="Host to bind to"),
+    port: int = typer.Option(8000, "--port", "-p", help="Port to listen on"),
+    reload: bool = typer.Option(False, "--reload", "-r", help="Enable auto-reload"),
+) -> None:
+    """Start the FastAPI server."""
+    from paperpulse.api import run_server
+
+    console.print(f"[bold]Starting PaperPulse API server[/bold]")
+    console.print(f"[dim]Host: {host}, Port: {port}, Reload: {reload}[/dim]")
+    console.print(f"[green]API docs: http://{host}:{port}/api/docs[/green]\n")
+
+    run_server(host=host, port=port, reload=reload)
+
+
+@api_app.command("routes")
+def list_routes() -> None:
+    """List all API routes."""
+    table = Table(title="PaperPulse API Routes")
+    table.add_column("Method", style="cyan")
+    table.add_column("Path", style="green")
+    table.add_column("Description", style="dim")
+
+    routes = [
+        ("POST", "/api/v1/auth/register", "Register new user"),
+        ("POST", "/api/v1/auth/token", "Get access token"),
+        ("GET", "/api/v1/users/me", "Get current user profile"),
+        ("PATCH", "/api/v1/users/me", "Update user profile"),
+        ("PATCH", "/api/v1/users/me/preferences", "Update preferences"),
+        ("POST", "/api/v1/users/me/change-password", "Change password"),
+        ("DELETE", "/api/v1/users/me", "Delete account"),
+        ("GET", "/api/v1/profiles", "List research profiles"),
+        ("POST", "/api/v1/profiles", "Create research profile"),
+        ("GET", "/api/v1/profiles/{id}", "Get profile details"),
+        ("PATCH", "/api/v1/profiles/{id}", "Update profile"),
+        ("DELETE", "/api/v1/profiles/{id}", "Delete profile"),
+        ("GET", "/api/v1/profiles/{id}/interests", "List interest categories"),
+        ("POST", "/api/v1/profiles/{id}/interests", "Create interest category"),
+        ("PATCH", "/api/v1/profiles/{id}/interests/{id}", "Update interest"),
+        ("DELETE", "/api/v1/profiles/{id}/interests/{id}", "Delete interest"),
+        ("POST", "/api/v1/profiles/{id}/interests/{id}/generate-embedding", "Generate embedding"),
+    ]
+
+    for method, path, description in routes:
+        table.add_row(method, path, description)
+
+    console.print(table)
+
+
+# Scheduler commands (Phase 4)
+scheduler_app = typer.Typer(help="Background job scheduler operations")
+app.add_typer(scheduler_app, name="scheduler")
+
+
+@scheduler_app.command("start")
+def start_scheduler(
+    foreground: bool = typer.Option(True, "--foreground/--background", "-f/-b", help="Run in foreground"),
+) -> None:
+    """Start the background job scheduler.
+
+    This runs the scheduler with all configured jobs:
+    - Paper collection (every 6 hours)
+    - Weekly digest generation (Sunday 8am)
+    - Daily digest generation (7am)
+    - Immediate alert checks (every hour)
+    - Embedding updates (daily at 2am)
+    """
+    from paperpulse.scheduler import get_job_status, init_scheduler, start_scheduler
+
+    console.print("[bold]Starting PaperPulse Scheduler[/bold]\n")
+
+    # Initialize scheduler with jobs
+    init_scheduler()
+
+    # Show registered jobs
+    jobs = get_job_status()
+    table = Table(title="Registered Jobs")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name", style="green")
+    table.add_column("Next Run", style="dim")
+    table.add_column("Trigger", style="dim")
+
+    for job in jobs:
+        table.add_row(
+            job["id"],
+            job["name"],
+            job["next_run"] or "Not scheduled",
+            job["trigger"],
+        )
+
+    console.print(table)
+    console.print()
+
+    # Start scheduler
+    start_scheduler()
+
+    if foreground:
+        console.print("[green]Scheduler running. Press Ctrl+C to stop.[/green]\n")
+        try:
+            # Keep the process running
+            asyncio.get_event_loop().run_forever()
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Shutting down scheduler...[/yellow]")
+            from paperpulse.scheduler import stop_scheduler
+            stop_scheduler()
+            console.print("[green]Scheduler stopped.[/green]")
+
+
+@scheduler_app.command("status")
+def scheduler_status() -> None:
+    """Show status of all scheduled jobs."""
+    from paperpulse.scheduler import get_job_status, get_scheduler, init_scheduler
+
+    # Initialize to get job info (doesn't start scheduler)
+    init_scheduler()
+
+    jobs = get_job_status()
+
+    if not jobs:
+        console.print("[yellow]No jobs registered[/yellow]")
+        return
+
+    table = Table(title="Scheduled Jobs Status")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name", style="green")
+    table.add_column("Next Run", style="yellow")
+    table.add_column("Trigger")
+
+    for job in jobs:
+        table.add_row(
+            job["id"],
+            job["name"],
+            job["next_run"] or "[dim]Not scheduled[/dim]",
+            job["trigger"],
+        )
+
+    console.print(table)
+
+
+@scheduler_app.command("run-job")
+def run_job(
+    job_name: str = typer.Argument(
+        ...,
+        help="Job to run: collect, weekly-digest, daily-digest, alerts, embeddings",
+    ),
+) -> None:
+    """Manually run a scheduled job.
+
+    Available jobs:
+    - collect: Collect papers from all sources
+    - weekly-digest: Generate weekly digest emails
+    - daily-digest: Generate daily digest emails
+    - alerts: Check and send immediate alerts
+    - embeddings: Update paper and profile embeddings
+    """
+    from paperpulse.scheduler.jobs import (
+        collect_papers_job,
+        generate_digests_job,
+        send_immediate_alerts_job,
+        update_embeddings_job,
+    )
+
+    job_map = {
+        "collect": collect_papers_job,
+        "weekly-digest": lambda: generate_digests_job("weekly"),
+        "daily-digest": lambda: generate_digests_job("daily"),
+        "alerts": send_immediate_alerts_job,
+        "embeddings": update_embeddings_job,
+    }
+
+    if job_name not in job_map:
+        console.print(f"[red]Unknown job: {job_name}[/red]")
+        console.print(f"[dim]Available jobs: {', '.join(job_map.keys())}[/dim]")
+        raise typer.Exit(1)
+
+    async def _run() -> None:
+        console.print(f"[dim]Running job: {job_name}...[/dim]\n")
+
+        try:
+            result = await job_map[job_name]()
+
+            console.print("[green]Job completed successfully![/green]")
+
+            if result:
+                table = Table(title="Job Results")
+                table.add_column("Metric", style="cyan")
+                table.add_column("Value", style="green")
+
+                for key, value in result.items():
+                    table.add_row(key.replace("_", " ").title(), str(value))
+
+                console.print(table)
+
+        except Exception as e:
+            console.print(f"[red]Job failed: {e}[/red]")
+            raise typer.Exit(1)
+
+    asyncio.run(_run())
+
+
+@scheduler_app.command("history")
+def job_history(
+    limit: int = typer.Option(20, "--limit", "-n", help="Number of entries to show"),
+    job_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by job type"),
+) -> None:
+    """Show recent job execution history."""
+
+    async def _history() -> None:
+        from sqlalchemy import select
+
+        from paperpulse.db.models import JobLog
+        from paperpulse.db.session import get_session
+
+        async with get_session() as session:
+            query = select(JobLog).order_by(JobLog.started_at.desc()).limit(limit)
+
+            if job_type:
+                query = query.where(JobLog.job_type == job_type)
+
+            result = await session.execute(query)
+            logs = result.scalars().all()
+
+        if not logs:
+            console.print("[yellow]No job history found[/yellow]")
+            return
+
+        table = Table(title="Job Execution History")
+        table.add_column("Job", style="cyan")
+        table.add_column("Type", style="dim")
+        table.add_column("Started", style="green")
+        table.add_column("Duration", style="yellow")
+        table.add_column("Status")
+        table.add_column("Items")
+
+        for log in logs:
+            status_style = "green" if log.status == "completed" else "red"
+            duration = f"{log.duration_seconds:.1f}s" if log.duration_seconds else "-"
+
+            table.add_row(
+                log.job_name,
+                log.job_type,
+                log.started_at.strftime("%Y-%m-%d %H:%M") if log.started_at else "-",
+                duration,
+                f"[{status_style}]{log.status}[/{status_style}]",
+                f"{log.items_processed}/{log.items_created}",
+            )
+
+        console.print(table)
+
+    asyncio.run(_history())
+
+
 # Digest commands
 digest_app = typer.Typer(help="Generate and send paper digests")
 app.add_typer(digest_app, name="digest")

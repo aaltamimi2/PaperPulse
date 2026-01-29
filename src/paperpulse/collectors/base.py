@@ -20,13 +20,31 @@ class CollectedPaper:
     published_date: Optional[datetime] = None
     source_feed_id: Optional[str] = None
 
+    # Source identifiers (Phase 1)
+    semantic_scholar_id: Optional[str] = None
+    pubmed_id: Optional[str] = None
+    source_type: Optional[str] = None  # rss, semantic_scholar, pubmed, arxiv
+
+    # Citation metrics (Phase 1)
+    citation_count: Optional[int] = None
+    influential_citation_count: Optional[int] = None
+    fields_of_study: list[str] = field(default_factory=list)
+    venue: Optional[str] = None
+    year: Optional[int] = None
+
     def content_hash(self) -> str:
         """Generate a content hash for deduplication."""
         import hashlib
 
-        # Use DOI if available, otherwise title + first author
+        # Use DOI if available, then other identifiers, then title + first author
         if self.doi:
             content = f"doi:{self.doi}"
+        elif self.semantic_scholar_id:
+            content = f"s2:{self.semantic_scholar_id}"
+        elif self.pubmed_id:
+            content = f"pmid:{self.pubmed_id}"
+        elif self.arxiv_id:
+            content = f"arxiv:{self.arxiv_id}"
         else:
             first_author = self.authors[0] if self.authors else ""
             content = f"title:{self.title.lower()}|author:{first_author.lower()}"

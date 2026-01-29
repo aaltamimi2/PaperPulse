@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,12 +22,24 @@ class Paper(Base, UUIDMixin, TimestampMixin):
     arxiv_id: Mapped[Optional[str]] = mapped_column(String(50), unique=True, index=True)
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
 
+    # Phase 1: Additional identifiers
+    semantic_scholar_id: Mapped[Optional[str]] = mapped_column(String(50), unique=True, index=True)
+    pubmed_id: Mapped[Optional[str]] = mapped_column(String(20), unique=True, index=True)
+    source_type: Mapped[Optional[str]] = mapped_column(String(30))  # rss, semantic_scholar, pubmed, arxiv
+
     # Metadata
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
     abstract: Mapped[Optional[str]] = mapped_column(Text)
     authors: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     journal: Mapped[Optional[str]] = mapped_column(String(512))
+    venue: Mapped[Optional[str]] = mapped_column(String(512))
     published_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    year: Mapped[Optional[int]] = mapped_column(Integer)
+
+    # Phase 1: Citation metrics
+    citation_count: Mapped[Optional[int]] = mapped_column(Integer)
+    influential_citation_count: Mapped[Optional[int]] = mapped_column(Integer)
+    fields_of_study: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
 
     # Source tracking
     source_feed_id: Mapped[Optional[str]] = mapped_column(

@@ -382,3 +382,214 @@ class JournalScorer(BaseScorer):
                 "followed_journals": context.profile_followed_journals,
             },
         )
+
+
+# =============================================================================
+# Phase 2: Enhanced Relevance Metrics
+# =============================================================================
+
+
+class CitationScorer(BaseScorer):
+    """Score papers based on citation metrics.
+
+    Uses citation count and influential citation count to assess paper impact.
+    Scores are normalized using field-aware thresholds.
+    """
+
+    name = "citation"
+    default_weight = 0.15
+
+    # Thresholds for normalization (can be adjusted per field)
+    HIGH_CITATION_THRESHOLD = 50
+    VERY_HIGH_CITATION_THRESHOLD = 200
+    INFLUENTIAL_MULTIPLIER = 3.0  # Influential citations weighted more heavily
+
+    def __init__(
+        self,
+        high_citation_threshold: int = 50,
+        very_high_threshold: int = 200,
+        influential_multiplier: float = 3.0,
+    ):
+        """Initialize citation scorer.
+
+        Args:
+            high_citation_threshold: Citations considered "high impact"
+            very_high_threshold: Citations considered "very high impact"
+            influential_multiplier: Weight multiplier for influential citations
+        """
+        self.high_threshold = high_citation_threshold
+        self.very_high_threshold = very_high_threshold
+        self.influential_multiplier = influential_multiplier
+
+    async def score(self, context: ScoringContext) -> ScoreResult:
+        """Score based on citation metrics.
+
+        Scoring formula:
+        - Base score from total citations (log-scaled)
+        - Bonus from influential citations
+        - New papers (no citations) get neutral score
+
+        Args:
+            context: Scoring context with citation data
+
+        Returns:
+            ScoreResult with citation-based score
+        """
+        citation_count = context.paper_citation_count
+        influential_count = context.paper_influential_citation_count
+
+        # Papers without citation data get neutral score
+        if citation_count is None:
+            return ScoreResult(
+                scorer_name=self.name,
+                score=0.5,
+                weight=self.default_weight,
+                details={"reason": "no_citation_data"},
+            )
+
+        # Calculate base citation score using logarithmic scaling
+        # This prevents papers with thousands of citations from dominating
+        import math
+
+        if citation_count == 0:
+            base_score = 0.3  # New papers get a modest score
+        else:
+            # Log scale: log(1 + citations) / log(1 + threshold)
+            log_citations = math.log1p(citation_count)
+            log_threshold = math.log1p(self.very_high_threshold)
+            base_score = min(1.0, log_citations / log_threshold)
+
+        # Bonus for influential citations
+        influential_bonus = 0.0
+        if influential_count and influential_count > 0:
+            # Influential citations are rarer and more meaningful
+            influential_ratio = influential_count / max(citation_count, 1)
+            influential_bonus = min(0.2, influential_ratio * 0.5)
+
+        # Combine scores
+        total_score = min(1.0, base_score * 0.8 + influential_bonus + 0.1)
+
+        return ScoreResult(
+            scorer_name=self.name,
+            score=total_score,
+            weight=self.default_weight,
+            details={
+                "citation_count": citation_count,
+                "influential_citation_count": influential_count,
+                "base_score": base_score,
+                "influential_bonus": influential_bonus,
+                "is_highly_cited": citation_count >= self.high_threshold,
+            },
+        )
+
+
+class RecencyScorer(BaseScorer):
+    """Score papers based on publication recency.
+
+    Uses exponential decay to favor recent publications while not
+    completely discarding older but relevant papers.
+    """
+
+    name = "recency"
+    default_weight = 0.10
+
+    def __init__(
+        self,
+        decay_half_life_days: int = 90,
+        max_age_days: int = 730,
+        new_paper_bonus: float = 0.1,
+    ):
+        """Initialize recency scorer.
+
+        Args:
+            decay_half_life_days: Days for score to decay by half
+            max_age_days: Maximum age to consider (older papers get min score)
+            new_paper_bonus: Bonus for very recent papers (< 7 days)
+        """
+        self.half_life = decay_half_life_days
+        self.max_age = max_age_days
+        self.new_paper_bonus = new_paper_bonus
+
+    async def score(self, context: ScoringContext) -> ScoreResult:
+        """Score based on publication date with exponential decay.
+
+        Formula: score = exp(-0.693 * age_days / half_life)
+
+        Args:
+            context: Scoring context with publication date
+
+        Returns:
+            ScoreResult with recency score
+        """
+        from datetime import timezone
+        import math
+
+        pub_date = context.paper_published_date
+        pub_year = context.paper_year
+
+        # Try to get a date
+        if pub_date is None and pub_year is not None:
+            # Approximate with mid-year if only year is available
+            from datetime import datetime as dt
+            pub_date = dt(pub_year, 7, 1, tzinfo=timezone.utc)
+
+        if pub_date is None:
+            return ScoreResult(
+                scorer_name=self.name,
+                score=0.5,
+                weight=self.default_weight,
+                details={"reason": "no_publication_date"},
+            )
+
+        # Ensure timezone-aware comparison
+        from datetime import datetime as dt
+        now = dt.now(timezone.utc)
+
+        if pub_date.tzinfo is None:
+            pub_date = pub_date.replace(tzinfo=timezone.utc)
+
+        # Calculate age in days
+        age_days = (now - pub_date).days
+
+        # Handle future dates (preprints with future publication)
+        if age_days < 0:
+            age_days = 0
+
+        # Cap at max age
+        if age_days > self.max_age:
+            score = 0.1  # Minimum score for very old papers
+            return ScoreResult(
+                scorer_name=self.name,
+                score=score,
+                weight=self.default_weight,
+                details={
+                    "age_days": age_days,
+                    "capped_at_max": True,
+                    "publication_date": pub_date.isoformat(),
+                },
+            )
+
+        # Exponential decay: score = exp(-0.693 * age / half_life)
+        # At age = half_life, score = 0.5
+        decay_constant = 0.693 / self.half_life
+        base_score = math.exp(-decay_constant * age_days)
+
+        # Bonus for very recent papers (< 7 days)
+        bonus = 0.0
+        if age_days < 7:
+            bonus = self.new_paper_bonus * (1 - age_days / 7)
+
+        total_score = min(1.0, base_score + bonus)
+
+        return ScoreResult(
+            scorer_name=self.name,
+            score=total_score,
+            weight=self.default_weight,
+            details={
+                "age_days": age_days,
+                "base_score": base_score,
+                "new_paper_bonus": bonus,
+                "publication_date": pub_date.isoformat(),
+                "half_life_days": self.half_life,
+            },
+        )

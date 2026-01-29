@@ -10,6 +10,7 @@ import structlog
 from paperpulse.collectors.base import CollectedPaper
 from paperpulse.core.config import get_settings
 from paperpulse.email.models import Digest, DigestPaper, DigestSection
+from paperpulse.email.summarization import SummarizationService
 from paperpulse.email.templates import DigestRenderer
 from paperpulse.scoring import AggregatedScore, EmbeddingService, ScoringPipeline
 
@@ -27,22 +28,71 @@ class ResearchInterest:
     followed_authors: list[str] = None
     followed_journals: list[str] = None
 
+    # Phase 2: Fields of study for enhanced matching
+    fields_of_study: list[str] = None
+
+    # Phase 2: Custom scorer weights (override pipeline defaults)
+    weight_semantic: Optional[float] = None
+    weight_keyword: Optional[float] = None
+    weight_author: Optional[float] = None
+    weight_novelty: Optional[float] = None
+    weight_citation: Optional[float] = None
+    weight_recency: Optional[float] = None
+    weight_tfidf: Optional[float] = None
+    weight_field_of_study: Optional[float] = None
+
+    # Phase 2: Custom thresholds
+    threshold_immediate: Optional[float] = None
+    threshold_weekly: Optional[float] = None
+
     def __post_init__(self):
         self.keywords = self.keywords or []
         self.excluded_keywords = self.excluded_keywords or []
         self.followed_authors = self.followed_authors or []
         self.followed_journals = self.followed_journals or []
+        self.fields_of_study = self.fields_of_study or []
 
     def to_profile_dict(self) -> dict:
         """Convert to profile dictionary for scoring pipeline."""
-        return {
+        profile = {
             "name": self.name,
             "description": self.description,
             "keywords": self.keywords,
             "excluded_keywords": self.excluded_keywords,
             "followed_authors": self.followed_authors,
             "followed_journals": self.followed_journals,
+            "fields_of_study": self.fields_of_study,
         }
+
+        # Add custom weights if specified
+        weights = {}
+        if self.weight_semantic is not None:
+            weights["semantic"] = self.weight_semantic
+        if self.weight_keyword is not None:
+            weights["keyword"] = self.weight_keyword
+        if self.weight_author is not None:
+            weights["author"] = self.weight_author
+        if self.weight_novelty is not None:
+            weights["novelty"] = self.weight_novelty
+        if self.weight_citation is not None:
+            weights["citation"] = self.weight_citation
+        if self.weight_recency is not None:
+            weights["recency"] = self.weight_recency
+        if self.weight_tfidf is not None:
+            weights["tfidf"] = self.weight_tfidf
+        if self.weight_field_of_study is not None:
+            weights["field_of_study"] = self.weight_field_of_study
+
+        if weights:
+            profile["custom_weights"] = weights
+
+        # Add custom thresholds if specified
+        if self.threshold_immediate is not None:
+            profile["threshold_immediate"] = self.threshold_immediate
+        if self.threshold_weekly is not None:
+            profile["threshold_weekly"] = self.threshold_weekly
+
+        return profile
 
 
 class DigestService:
@@ -53,6 +103,8 @@ class DigestService:
         scoring_pipeline: Optional[ScoringPipeline] = None,
         renderer: Optional[DigestRenderer] = None,
         mock_mode: bool = False,
+        enable_ai_summaries: bool = True,
+        max_papers_to_summarize: int = 10,
     ):
         """Initialize the digest service.
 
@@ -60,6 +112,8 @@ class DigestService:
             scoring_pipeline: Pipeline for scoring papers
             renderer: Template renderer for emails
             mock_mode: Use mock embeddings for testing
+            enable_ai_summaries: Generate AI summaries for papers
+            max_papers_to_summarize: Max papers per section to generate AI summaries for
         """
         if scoring_pipeline is None:
             embedding_service = EmbeddingService(mock_mode=mock_mode)
@@ -67,6 +121,9 @@ class DigestService:
 
         self.scoring_pipeline = scoring_pipeline
         self.renderer = renderer or DigestRenderer()
+        self.enable_ai_summaries = enable_ai_summaries
+        self.max_papers_to_summarize = max_papers_to_summarize
+        self.summarization_service = SummarizationService(mock_mode=mock_mode)
 
     def _collected_to_dict(self, paper: CollectedPaper) -> dict:
         """Convert CollectedPaper to dict for scoring."""
@@ -200,6 +257,16 @@ class DigestService:
 
                     if len(section_papers) >= max_papers_per_section:
                         break
+
+            # Enrich papers with AI summaries if enabled
+            if self.enable_ai_summaries and section_papers:
+                section_papers = await self.summarization_service.enrich_papers_batch(
+                    papers=section_papers,
+                    interest_name=interest.name,
+                    interest_description=interest.description,
+                    keywords=interest.keywords or [],
+                    max_papers=self.max_papers_to_summarize,
+                )
 
             section = DigestSection(
                 interest_name=interest.name,

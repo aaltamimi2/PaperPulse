@@ -34,6 +34,22 @@ dependencies = [
     "structlog>=23.2.0",
     "tenacity>=8.2.3",
     "python-dateutil>=2.8.2",
+    # Phase 1: Literature Discovery APIs
+    "arxiv>=2.1.0",
+    "biopython>=1.83",
+    "aiohttp>=3.9.0",
+    # Phase 2: Enhanced Relevance Metrics
+    "scikit-learn>=1.4.0",
+    "numpy>=1.26.0",
+    # Phase 3: FastAPI User Profile Management
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-multipart>=0.0.6",
+    # Phase 4: Scheduling System
+    "apscheduler>=3.10.0",
+    "pytz>=2024.1",
 ]
 
 [project.optional-dependencies]
@@ -46,10 +62,6 @@ dev = [
     "pre-commit>=3.6.0",
     "factory-boy>=3.3.0",
     "respx>=0.20.2",
-]
-api = [
-    "fastapi>=0.104.1",
-    "uvicorn>=0.24.0",
 ]
 
 [project.scripts]

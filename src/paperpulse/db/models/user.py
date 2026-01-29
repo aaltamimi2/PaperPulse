@@ -23,14 +23,30 @@ class User(Base, UUIDMixin, TimestampMixin):
     digest_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     immediate_alerts_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Phase 3: Digest scheduling preferences
+    digest_frequency: Mapped[str] = mapped_column(String(20), default="weekly")  # daily, weekly, monthly
+    digest_day: Mapped[int] = mapped_column(default=0)  # 0=Sunday for weekly, 1=1st for monthly
+    digest_hour: Mapped[int] = mapped_column(default=8)  # Hour of day (0-23) in user's timezone
+    timezone: Mapped[str] = mapped_column(String(50), default="UTC")
+
     # Relationships
     research_profiles: Mapped[list["ResearchProfile"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    digest_logs: Mapped[list["DigestLog"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:
         return f"<User(id={self.id!r}, email={self.email!r})>"
+
+
+# Forward reference for DigestLog
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from paperpulse.db.models.digest_log import DigestLog
 
 
 class ResearchProfile(Base, UUIDMixin, TimestampMixin):
@@ -77,11 +93,18 @@ class InterestCategory(Base, UUIDMixin, TimestampMixin):
     profile_embedding: Mapped[Optional[list[float]]] = mapped_column(Vector(768))
     embedding_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
-    # Scoring weights (can override defaults)
-    weight_semantic: Mapped[float] = mapped_column(default=0.4)
-    weight_keyword: Mapped[float] = mapped_column(default=0.3)
-    weight_author: Mapped[float] = mapped_column(default=0.2)
-    weight_novelty: Mapped[float] = mapped_column(default=0.1)
+    # Scoring weights (can override defaults) - Updated for Phase 2
+    weight_semantic: Mapped[float] = mapped_column(default=0.30)
+    weight_keyword: Mapped[float] = mapped_column(default=0.15)
+    weight_author: Mapped[float] = mapped_column(default=0.15)
+    weight_novelty: Mapped[float] = mapped_column(default=0.05)
+    weight_citation: Mapped[float] = mapped_column(default=0.15)
+    weight_recency: Mapped[float] = mapped_column(default=0.10)
+    weight_tfidf: Mapped[float] = mapped_column(default=0.05)
+    weight_field_of_study: Mapped[float] = mapped_column(default=0.05)
+
+    # Fields of study for matching
+    fields_of_study: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
 
     # Thresholds
     threshold_immediate: Mapped[float] = mapped_column(default=0.8)

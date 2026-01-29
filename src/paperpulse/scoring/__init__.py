@@ -5,21 +5,32 @@ from paperpulse.scoring.embeddings import EmbeddingService, cosine_similarity
 from paperpulse.scoring.pipeline import ScoringConfig, ScoringPipeline
 from paperpulse.scoring.scorers import (
     AuthorScorer,
+    CitationScorer,
     KeywordScorer,
     NoveltyScorer,
+    RecencyScorer,
     SemanticScorer,
 )
+from paperpulse.scoring.tfidf import FieldOfStudyScorer, TFIDFScorer
 
 __all__ = [
+    # Base classes
     "AggregatedScore",
-    "AuthorScorer",
-    "EmbeddingService",
-    "KeywordScorer",
-    "NoveltyScorer",
     "ScoreResult",
     "ScoringConfig",
     "ScoringContext",
     "ScoringPipeline",
-    "SemanticScorer",
+    # Embedding utilities
+    "EmbeddingService",
     "cosine_similarity",
+    # Original scorers
+    "AuthorScorer",
+    "KeywordScorer",
+    "NoveltyScorer",
+    "SemanticScorer",
+    # Phase 2 scorers
+    "CitationScorer",
+    "RecencyScorer",
+    "TFIDFScorer",
+    "FieldOfStudyScorer",
 ]
