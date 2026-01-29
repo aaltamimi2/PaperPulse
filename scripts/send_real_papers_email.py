@@ -9,8 +9,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-# Configure environment
-os.environ["GEMINI_API_KEY"] = "AIzaSyAOkP57wd-1RjTeJ6GdebznbzncYFBHwqA"
+# Configure environment - loads from .env file
+# Get a new API key from: https://makersuite.google.com/app/apikey
+from dotenv import load_dotenv
+load_dotenv(PROJECT_ROOT / ".env")
 
 from rich.console import Console
 
