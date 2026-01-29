@@ -19,6 +19,20 @@ from paperpulse.email import DigestRenderer, DigestService, ResearchInterest
 
 console = Console()
 
+# Followed authors (from Google Scholar profiles)
+FOLLOWED_AUTHORS = [
+    "Steven De Meester",
+    "Reid C. Van Lehn",
+    "Reid Van Lehn",
+    "Siewert J. Marrink",
+    "Siewert Marrink",
+    "George Huber",
+    "George W. Huber",
+    "Frank Noé",
+    "Frank Noe",
+    "Cecilia Clementi",
+]
+
 # Your actual research interests
 INTERESTS = [
     ResearchInterest(
@@ -26,6 +40,7 @@ INTERESTS = [
         description="Using ML and deep learning for enhanced sampling, collective variables, and force field development in MD simulations.",
         keywords=["machine learning", "molecular dynamics", "deep learning",
                   "enhanced sampling", "collective variables", "neural network", "GROMACS"],
+        followed_authors=FOLLOWED_AUTHORS,
         followed_journals=["Journal of Chemical Theory and Computation", "Journal of Chemical Physics"],
         fields_of_study=["machine learning", "computational chemistry", "molecular dynamics"],
     ),
@@ -34,6 +49,7 @@ INTERESTS = [
         description="Molecular dynamics simulations of polymer systems, coarse-graining, and polymer physics.",
         keywords=["polymer", "molecular dynamics", "coarse-grained", "GROMACS",
                   "chain dynamics", "diffusion", "melt"],
+        followed_authors=FOLLOWED_AUTHORS,
         followed_journals=["Macromolecules", "Soft Matter"],
         fields_of_study=["polymer science", "materials science"],
     ),
@@ -128,10 +144,13 @@ async def send_real_digest(papers, user_email: str):
 
     console.print(f"\n[bold cyan]Generating AI-enhanced digest...[/bold cyan]")
 
-    # Use mock mode for embeddings (API restrictions) but real AI for summaries
+    # NOTE: Set mock_mode=False once you have a valid Gemini API key
+    # Current key was leaked and needs replacement from: https://makersuite.google.com/app/apikey
+    use_real_embeddings = os.environ.get("USE_REAL_EMBEDDINGS", "false").lower() == "true"
+
     service = DigestService(
-        mock_mode=True,  # Mock embeddings
-        enable_ai_summaries=True,  # Real AI summaries still work
+        mock_mode=not use_real_embeddings,  # Toggle with USE_REAL_EMBEDDINGS=true
+        enable_ai_summaries=not use_real_embeddings,  # AI summaries need valid key too
         max_papers_to_summarize=10,
     )
 
@@ -152,6 +171,25 @@ async def send_real_digest(papers, user_email: str):
         console.print(f"\n[bold]{section.interest_name}[/bold]: {len(section.papers)} papers")
         for p in section.papers[:5]:
             console.print(f"  • {p.title[:55]}... [cyan]{p.score_percent}%[/cyan]")
+
+    # Suggest authors to follow (authors from highly-scored papers not already followed)
+    console.print(f"\n[bold yellow]📝 Suggested Authors to Follow:[/bold yellow]")
+    author_counts = {}
+    for section in digest.sections:
+        for p in section.papers:
+            if p.relevance_score >= 0.4:  # Only from relevant papers
+                for author in (p.authors or [])[:3]:  # First 3 authors per paper
+                    # Check if not already followed
+                    author_lower = author.lower()
+                    already_followed = any(f.lower() in author_lower or author_lower in f.lower()
+                                          for f in FOLLOWED_AUTHORS)
+                    if not already_followed:
+                        author_counts[author] = author_counts.get(author, 0) + 1
+
+    # Show top suggested authors
+    suggested = sorted(author_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+    for author, count in suggested:
+        console.print(f"  • {author} (appears in {count} relevant papers)")
 
     # Render and send
     renderer = DigestRenderer()
