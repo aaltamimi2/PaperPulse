@@ -58,7 +58,7 @@ async def collect_real_papers():
     for query in queries:
         try:
             console.print(f"  Searching: {query}")
-            papers = await arxiv.search_papers(query, limit=5)
+            papers = await arxiv.search_papers(query, limit=10)
             all_papers.extend(papers)
             console.print(f"    Found {len(papers)} papers")
         except Exception as e:
@@ -82,7 +82,7 @@ async def collect_real_papers():
     for query in pubmed_queries:
         try:
             console.print(f"  Searching: {query}")
-            papers = await pubmed.search_papers(query, limit=5)
+            papers = await pubmed.search_papers(query, limit=10)
             all_papers.extend(papers)
             console.print(f"    Found {len(papers)} papers")
         except Exception as e:
@@ -128,20 +128,21 @@ async def send_real_digest(papers, user_email: str):
 
     console.print(f"\n[bold cyan]Generating AI-enhanced digest...[/bold cyan]")
 
+    # Use mock mode for embeddings (API restrictions) but real AI for summaries
     service = DigestService(
-        mock_mode=False,
-        enable_ai_summaries=True,
-        max_papers_to_summarize=8,
+        mock_mode=True,  # Mock embeddings
+        enable_ai_summaries=True,  # Real AI summaries still work
+        max_papers_to_summarize=10,
     )
 
     digest = await service.generate_digest(
-        user_name="Alim",
+        user_name="Ali",
         user_email=user_email,
         interests=INTERESTS,
         papers=paper_dicts,
         digest_type="weekly",
         min_score=0.1,
-        max_papers_per_section=5,
+        max_papers_per_section=10,
     )
 
     console.print(f"[green]Digest generated: {digest.total_papers} papers[/green]")

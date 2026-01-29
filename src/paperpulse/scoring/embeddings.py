@@ -25,11 +25,11 @@ except ImportError:
 
 
 def _deterministic_embedding(text: str, dimensions: int = 768) -> list[float]:
-    """Generate a deterministic pseudo-embedding based on text hash.
+    """Generate a deterministic pseudo-embedding based on word presence.
 
     This is a fallback for testing when the API is unavailable.
-    It produces consistent embeddings that maintain some semantic properties
-    (same text = same embedding, similar texts = somewhat similar embeddings).
+    It produces consistent embeddings where texts with common words
+    have higher cosine similarity.
 
     Args:
         text: Text to embed
@@ -38,27 +38,47 @@ def _deterministic_embedding(text: str, dimensions: int = 768) -> list[float]:
     Returns:
         Pseudo-embedding vector
     """
-    # Create multiple hashes for more dimensions
-    embedding = []
-    text_lower = text.lower().strip()
+    import re
 
-    # Use different seeds to generate more dimensions
-    for seed in range(dimensions // 64 + 1):
-        hash_input = f"{seed}:{text_lower}"
-        hash_bytes = hashlib.sha512(hash_input.encode()).digest()
-        for i in range(0, min(64, dimensions - len(embedding)), 1):
-            if len(embedding) >= dimensions:
-                break
-            # Convert bytes to float in range [-1, 1]
-            byte_val = hash_bytes[i % len(hash_bytes)]
-            embedding.append((byte_val / 127.5) - 1.0)
+    # Extract words and normalize
+    text_lower = text.lower().strip()
+    words = set(re.findall(r'\b[a-z]{3,}\b', text_lower))
+
+    # Create embedding based on word hashes
+    # Each word contributes to specific dimensions based on its hash
+    embedding = [0.0] * dimensions
+
+    for word in words:
+        # Hash word to get deterministic dimension indices
+        word_hash = hashlib.md5(word.encode()).digest()
+
+        # Each word affects multiple dimensions
+        for i in range(4):
+            # Get dimension index from hash bytes
+            dim_idx = (word_hash[i * 2] * 256 + word_hash[i * 2 + 1]) % dimensions
+            # Get contribution sign and magnitude from hash
+            sign = 1 if word_hash[i + 8] > 127 else -1
+            magnitude = 0.5 + (word_hash[i + 12] / 512.0)  # 0.5 to 1.0
+            embedding[dim_idx] += sign * magnitude
+
+    # Add small noise based on full text hash (for uniqueness)
+    text_hash = hashlib.sha256(text_lower.encode()).digest()
+    for i in range(min(32, dimensions)):
+        noise = (text_hash[i % len(text_hash)] / 2550.0) - 0.05  # Small noise
+        embedding[i] += noise
 
     # Normalize to unit length
     norm = math.sqrt(sum(x * x for x in embedding))
     if norm > 0:
         embedding = [x / norm for x in embedding]
+    else:
+        # Fallback: create a random unit vector
+        for i in range(dimensions):
+            embedding[i] = (hashlib.md5(f"{i}:{text_lower}".encode()).digest()[0] / 127.5) - 1
+        norm = math.sqrt(sum(x * x for x in embedding))
+        embedding = [x / norm for x in embedding]
 
-    return embedding[:dimensions]
+    return embedding
 
 
 class EmbeddingService:

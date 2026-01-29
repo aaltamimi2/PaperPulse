@@ -233,6 +233,9 @@ class DigestService:
             period_end=period_end,
         )
 
+        # Track papers already included to avoid duplicates across sections
+        used_paper_titles: set[str] = set()
+
         # Score papers for each interest and create sections
         for interest in interests:
             logger.debug("Scoring for interest", interest=interest.name)
@@ -246,9 +249,15 @@ class DigestService:
             weekly_count = 0
 
             for paper_dict, score in scored_papers:
+                # Skip papers already included in previous sections
+                paper_title = paper_dict.get("title", "").lower().strip()
+                if paper_title in used_paper_titles:
+                    continue
+
                 if score.total_score >= min_score:
                     digest_paper = self._create_digest_paper(paper_dict, score)
                     section_papers.append(digest_paper)
+                    used_paper_titles.add(paper_title)
 
                     if score.priority == "immediate":
                         immediate_count += 1
