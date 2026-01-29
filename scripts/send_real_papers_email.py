@@ -19,11 +19,12 @@ from rich.console import Console
 from paperpulse.collectors import ArxivCollector, PubMedCollector
 from paperpulse.email import DigestRenderer, DigestService, ResearchInterest
 from paperpulse.email.models import SuggestedAuthor
+from paperpulse import profile
 
 console = Console()
 
-# Followed authors (from Google Scholar profiles)
-FOLLOWED_AUTHORS = [
+# Default followed authors (from Google Scholar profiles)
+DEFAULT_AUTHORS = [
     "Steven De Meester",
     "Reid C. Van Lehn",
     "Reid Van Lehn",
@@ -35,6 +36,10 @@ FOLLOWED_AUTHORS = [
     "Frank Noe",
     "Cecilia Clementi",
 ]
+
+# Initialize profile with defaults if empty, then load from profile
+profile.init_default_authors(DEFAULT_AUTHORS)
+FOLLOWED_AUTHORS = profile.get_followed_authors()
 
 # Your actual research interests
 INTERESTS = [
@@ -212,8 +217,29 @@ async def send_real_digest(papers, user_email: str):
             console.print(f"  • {p.title[:55]}... [cyan]{p.score_percent}%[/cyan]")
 
     console.print(f"\n[bold yellow]📝 Suggested Authors:[/bold yellow]")
-    for sa in digest.suggested_authors:
-        console.print(f"  • {sa.name} ({sa.paper_count} papers)")
+    for i, sa in enumerate(digest.suggested_authors, 1):
+        console.print(f"  {i}. {sa.name} ({sa.paper_count} papers)")
+
+    # Offer to add suggested authors
+    if digest.suggested_authors:
+        console.print(f"\n[cyan]Add authors to follow? Enter numbers (e.g., 1,3,5) or 'all' or press Enter to skip:[/cyan]")
+        try:
+            choice = input("> ").strip().lower()
+            if choice:
+                if choice == "all":
+                    to_add = [sa.name for sa in digest.suggested_authors]
+                else:
+                    indices = [int(x.strip()) - 1 for x in choice.split(",") if x.strip().isdigit()]
+                    to_add = [digest.suggested_authors[i].name for i in indices if 0 <= i < len(digest.suggested_authors)]
+
+                if to_add:
+                    added = profile.add_authors_from_suggestions(to_add)
+                    if added:
+                        console.print(f"[green]✓ Added {len(added)} author(s): {', '.join(added)}[/green]")
+                    else:
+                        console.print("[yellow]Authors already in your list[/yellow]")
+        except (ValueError, IndexError, EOFError):
+            pass  # Skip on invalid input or non-interactive mode
 
     # Render and send
     renderer = DigestRenderer()
