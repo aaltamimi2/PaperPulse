@@ -51,7 +51,7 @@ class SummarizationService:
             Generated summary (2-3 sentences)
         """
         if self.mock_mode:
-            return self._mock_summary(title)
+            return self._mock_summary(title, abstract)
 
         if not abstract:
             return f"This paper titled '{title}' explores the topic. No abstract available for detailed summary."
@@ -80,7 +80,7 @@ Summary (exactly {max_sentences} sentences):"""
 
         except Exception as e:
             logger.error("Failed to generate summary", title=title[:50], error=str(e))
-            return self._mock_summary(title)
+            return self._mock_summary(title, abstract)
 
     async def generate_relevance_explanation(
         self,
@@ -105,7 +105,7 @@ Summary (exactly {max_sentences} sentences):"""
             Personalized relevance explanation
         """
         if self.mock_mode:
-            return self._mock_relevance(interest_name, relevance_score)
+            return self._mock_relevance(interest_name, relevance_score, abstract, keywords)
 
         if not abstract:
             return f"This paper may be relevant to your interest in {interest_name}."
@@ -146,7 +146,7 @@ Why this paper matters (1-2 sentences):"""
                 title=title[:50],
                 error=str(e),
             )
-            return self._mock_relevance(interest_name, relevance_score)
+            return self._mock_relevance(interest_name, relevance_score, abstract, keywords)
 
     async def enrich_paper(
         self,
@@ -240,23 +240,50 @@ Why this paper matters (1-2 sentences):"""
 
         return list(enriched)
 
-    def _mock_summary(self, title: str) -> str:
-        """Generate a placeholder summary for testing."""
-        return (
-            f"This paper presents novel findings in the field. "
-            f"The research methodology is rigorous and the results are significant. "
-            f"Further investigation may yield important practical applications."
-        )
+    def _mock_summary(self, title: str, abstract: Optional[str] = None) -> str:
+        """Generate a summary by extracting key sentences from the abstract."""
+        if abstract and len(abstract) > 100:
+            # Extract first 2-3 sentences from abstract as summary
+            import re
+            sentences = re.split(r'(?<=[.!?])\s+', abstract.strip())
+            # Take first 2-3 sentences, max ~400 chars
+            summary_sentences = []
+            total_len = 0
+            for s in sentences[:3]:
+                if total_len + len(s) < 400:
+                    summary_sentences.append(s)
+                    total_len += len(s)
+                else:
+                    break
+            if summary_sentences:
+                return ' '.join(summary_sentences)
 
-    def _mock_relevance(self, interest_name: str, score: float) -> str:
-        """Generate a placeholder relevance explanation for testing."""
-        score_pct = int(score * 100)
-        if score >= 0.8:
-            return f"This paper is highly relevant to your work in {interest_name}, directly addressing key topics you follow."
+        # Fallback for no abstract
+        return f"This paper explores {title.lower().rstrip('.')}. See abstract for details."
+
+    def _mock_relevance(
+        self,
+        interest_name: str,
+        score: float,
+        abstract: Optional[str] = None,
+        keywords: Optional[list[str]] = None,
+    ) -> str:
+        """Generate relevance explanation based on keyword matches in abstract."""
+        # Find which keywords appear in the abstract
+        matched_keywords = []
+        if abstract and keywords:
+            abstract_lower = abstract.lower()
+            for kw in keywords:
+                if kw.lower() in abstract_lower:
+                    matched_keywords.append(kw)
+
+        if matched_keywords:
+            kw_str = ", ".join(matched_keywords[:3])
+            return f"Relevant to {interest_name}: discusses {kw_str}."
         elif score >= 0.5:
-            return f"This paper connects to your interest in {interest_name} and may offer useful insights."
+            return f"Connects to your interest in {interest_name}."
         else:
-            return f"This paper has some overlap with your {interest_name} research area."
+            return f"Some overlap with {interest_name}."
 
 
 class DigestHighlightGenerator:

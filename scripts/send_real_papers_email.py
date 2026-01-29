@@ -55,6 +55,14 @@ INTERESTS = [
         followed_journals=["Macromolecules", "Soft Matter"],
         fields_of_study=["polymer science", "materials science"],
     ),
+    ResearchInterest(
+        name="AI & Foundation Models",
+        description="Advances in agentic AI, large language models, foundation models, reasoning, and AI systems.",
+        keywords=["large language model", "LLM", "foundation model", "agentic",
+                  "transformer", "GPT", "reasoning", "AI agent", "prompt"],
+        followed_journals=["Nature Machine Intelligence", "NeurIPS", "ICML"],
+        fields_of_study=["artificial intelligence", "machine learning", "natural language processing"],
+    ),
 ]
 
 
@@ -71,6 +79,10 @@ async def collect_real_papers():
         "neural network force field",
         "polymer molecular dynamics simulation",
         "enhanced sampling deep learning",
+        # AI/Foundation model queries
+        "large language model reasoning",
+        "agentic AI systems",
+        "foundation model",
     ]
 
     for query in queries:
@@ -163,7 +175,7 @@ async def send_real_digest(papers, user_email: str):
         papers=paper_dicts,
         digest_type="weekly",
         min_score=0.1,
-        max_papers_per_section=10,
+        max_papers_per_section=5,
     )
 
     console.print(f"[green]Digest generated: {digest.total_papers} papers[/green]")
