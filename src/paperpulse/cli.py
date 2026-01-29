@@ -259,5 +259,206 @@ def init_database() -> None:
     asyncio.run(_init())
 
 
+# Digest commands
+digest_app = typer.Typer(help="Generate and send paper digests")
+app.add_typer(digest_app, name="digest")
+
+
+@digest_app.command("preview")
+def preview_digest(
+    journals: list[str] = typer.Option(
+        ["jctc", "macromolecules"],
+        "--journal", "-j",
+        help="ACS journal codes to collect from",
+    ),
+    output: Optional[str] = typer.Option(
+        None,
+        "--output", "-o",
+        help="Output HTML file (prints text to console if not specified)",
+    ),
+) -> None:
+    """Generate a preview digest with sample research interests."""
+
+    async def _preview() -> None:
+        from paperpulse.collectors.acs_feeds import get_feed_by_code
+        from paperpulse.collectors.rss_collector import RSSCollector
+        from paperpulse.email import DigestRenderer, DigestService, ResearchInterest
+
+        # Define sample research interests (user's interests)
+        interests = [
+            ResearchInterest(
+                name="Polymer Molecular Dynamics Simulations",
+                description="MD simulations of polymer systems using GROMACS, LAMMPS",
+                keywords=["molecular dynamics", "polymer", "GROMACS", "coarse-grained",
+                         "chain dynamics", "diffusion", "simulation", "force field"],
+                excluded_keywords=["synthesis", "experimental"],
+                followed_journals=["Macromolecules", "Journal of Chemical Physics"],
+            ),
+            ResearchInterest(
+                name="Agentic AI",
+                description="Autonomous AI agents and LLM-based systems",
+                keywords=["agent", "agentic", "large language model", "LLM",
+                         "autonomous", "multi-agent", "reasoning"],
+                followed_journals=["Nature Machine Intelligence"],
+            ),
+            ResearchInterest(
+                name="Machine Learned Collective Variables",
+                description="ML approaches for enhanced sampling in molecular simulations",
+                keywords=["collective variable", "machine learning", "deep learning",
+                         "enhanced sampling", "metadynamics", "neural network",
+                         "autoencoder", "reaction coordinate", "free energy"],
+                followed_journals=["Journal of Chemical Theory and Computation"],
+            ),
+        ]
+
+        # Collect papers from specified journals
+        collector = RSSCollector()
+        all_papers = []
+
+        for code in journals:
+            feed = get_feed_by_code(code)
+            if not feed:
+                console.print(f"[yellow]Unknown journal code: {code}[/yellow]")
+                continue
+
+            console.print(f"[dim]Collecting from {feed.journal_name}...[/dim]")
+            result = await collector.collect(
+                feed_id=feed.journal_code,
+                feed_url=feed.feed_url,
+                feed_name=feed.display_name,
+                journal_name=feed.journal_name,
+            )
+
+            if result.success:
+                all_papers.extend(result.papers)
+                console.print(f"  Found {len(result.papers)} papers")
+
+        await collector.close()
+
+        if not all_papers:
+            console.print("[red]No papers collected![/red]")
+            return
+
+        console.print(f"\n[bold]Total papers: {len(all_papers)}[/bold]")
+        console.print("[dim]Generating digest...[/dim]\n")
+
+        # Generate digest
+        service = DigestService(mock_mode=True)
+        digest = await service.generate_digest(
+            user_name="Researcher",
+            user_email="researcher@example.com",
+            interests=interests,
+            papers=all_papers,
+            digest_type="weekly",
+        )
+
+        # Render
+        renderer = DigestRenderer()
+        html_content, text_content = renderer.render(digest)
+
+        if output:
+            with open(output, "w") as f:
+                f.write(html_content)
+            console.print(f"[green]HTML digest saved to: {output}[/green]")
+        else:
+            # Print text version to console
+            console.print(text_content)
+
+    asyncio.run(_preview())
+
+
+@digest_app.command("send")
+def send_digest(
+    email: str = typer.Argument(..., help="Recipient email address"),
+    journals: list[str] = typer.Option(
+        ["jctc", "macromolecules"],
+        "--journal", "-j",
+        help="ACS journal codes to collect from",
+    ),
+    console_only: bool = typer.Option(
+        True,
+        "--console/--smtp",
+        help="Print to console instead of sending via SMTP",
+    ),
+) -> None:
+    """Generate and send a digest email."""
+
+    async def _send() -> None:
+        from paperpulse.collectors.acs_feeds import get_feed_by_code
+        from paperpulse.collectors.rss_collector import RSSCollector
+        from paperpulse.email import (
+            DigestRenderer,
+            DigestService,
+            EmailSender,
+            ResearchInterest,
+        )
+
+        # Same interests as preview
+        interests = [
+            ResearchInterest(
+                name="Polymer Molecular Dynamics Simulations",
+                description="MD simulations of polymer systems",
+                keywords=["molecular dynamics", "polymer", "GROMACS", "simulation"],
+            ),
+            ResearchInterest(
+                name="Agentic AI",
+                description="Autonomous AI agents and LLM systems",
+                keywords=["agent", "LLM", "autonomous", "multi-agent"],
+            ),
+            ResearchInterest(
+                name="Machine Learned Collective Variables",
+                description="ML for enhanced sampling",
+                keywords=["collective variable", "machine learning", "enhanced sampling"],
+            ),
+        ]
+
+        # Collect papers
+        collector = RSSCollector()
+        all_papers = []
+
+        for code in journals:
+            feed = get_feed_by_code(code)
+            if not feed:
+                continue
+
+            console.print(f"[dim]Collecting from {feed.journal_name}...[/dim]")
+            result = await collector.collect(
+                feed_id=feed.journal_code,
+                feed_url=feed.feed_url,
+                feed_name=feed.display_name,
+                journal_name=feed.journal_name,
+            )
+
+            if result.success:
+                all_papers.extend(result.papers)
+
+        await collector.close()
+
+        if not all_papers:
+            console.print("[red]No papers collected![/red]")
+            return
+
+        # Generate and send
+        service = DigestService(mock_mode=True)
+        digest = await service.generate_digest(
+            user_name=email.split("@")[0],
+            user_email=email,
+            interests=interests,
+            papers=all_papers,
+        )
+
+        renderer = DigestRenderer()
+        sender = EmailSender(mock_mode=console_only)
+
+        success = await sender.send_digest(digest, renderer)
+
+        if success:
+            console.print("[green]Digest sent successfully![/green]")
+        else:
+            console.print("[red]Failed to send digest[/red]")
+
+    asyncio.run(_send())
+
+
 if __name__ == "__main__":
     app()
