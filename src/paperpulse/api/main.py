@@ -8,7 +8,14 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from paperpulse.api.routes import auth_router, profiles_router, users_router
+from paperpulse.api.routes import (
+    auth_router,
+    clustering_router,
+    papers_router,
+    profiles_router,
+    reading_lists_router,
+    users_router,
+)
 from paperpulse.core.config import get_settings
 from paperpulse.db.session import close_db, init_db
 
@@ -100,6 +107,18 @@ def create_app() -> FastAPI:
         profiles_router,
         prefix="/api/v1/profiles",
     )
+    app.include_router(
+        papers_router,
+        prefix="/api/v1/papers",
+    )
+    app.include_router(
+        clustering_router,
+        prefix="/api/v1/clustering",
+    )
+    app.include_router(
+        reading_lists_router,
+        prefix="/api/v1/reading-lists",
+    )
 
     # Health check endpoint
     @app.get("/health", tags=["health"])
@@ -131,6 +150,9 @@ def create_app() -> FastAPI:
                 "auth": "/api/v1/auth",
                 "users": "/api/v1/users",
                 "profiles": "/api/v1/profiles",
+                "papers": "/api/v1/papers",
+                "clustering": "/api/v1/clustering",
+                "reading_lists": "/api/v1/reading-lists",
             },
         }
 
