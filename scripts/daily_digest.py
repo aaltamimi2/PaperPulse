@@ -156,9 +156,9 @@ async def send_daily_digest(user_email: str):
             "fields_of_study": p.fields_of_study,
         })
 
-    # Filter out previously sent papers
-    unsent_papers = history.filter_unsent_papers(paper_dicts, days_to_check=7)
-    console.print(f"[cyan]New papers (not sent in last 7 days): {len(unsent_papers)}[/cyan]")
+    # Filter out previously sent papers (never repeat)
+    unsent_papers = history.filter_unsent_papers(paper_dicts, days_to_check=None)
+    console.print(f"[cyan]New papers (never sent before): {len(unsent_papers)}[/cyan]")
 
     if not unsent_papers:
         console.print("[yellow]No new papers to send today.[/yellow]")

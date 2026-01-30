@@ -43,14 +43,23 @@ def get_paper_key(paper: dict) -> str:
     return f"title:{title[:100]}"
 
 
-def is_paper_sent(paper: dict, days_to_check: int = 7) -> bool:
-    """Check if a paper was already sent within the last N days."""
+def is_paper_sent(paper: dict, days_to_check: int = None) -> bool:
+    """Check if a paper was already sent.
+
+    Args:
+        paper: Paper dict
+        days_to_check: If None, never repeat. If int, only check within N days.
+    """
     history = load_history()
     sent = history.get("sent_papers", {})
 
     key = get_paper_key(paper)
     if key not in sent:
         return False
+
+    # If days_to_check is None, never repeat
+    if days_to_check is None:
+        return True
 
     # Check if it was sent within the lookback period
     sent_date = datetime.fromisoformat(sent[key])
@@ -85,12 +94,22 @@ def mark_papers_sent(papers: list[dict]) -> None:
     save_history(history)
 
 
-def filter_unsent_papers(papers: list[dict], days_to_check: int = 7) -> list[dict]:
-    """Filter out papers that were already sent."""
+def filter_unsent_papers(papers: list[dict], days_to_check: int = None) -> list[dict]:
+    """Filter out papers that were already sent.
+
+    Args:
+        papers: List of paper dicts
+        days_to_check: If None, never repeat papers. If int, allow repeat after N days.
+    """
     history = load_history()
     sent = history.get("sent_papers", {})
-    cutoff = datetime.now() - timedelta(days=days_to_check)
 
+    # Never repeat mode
+    if days_to_check is None:
+        return [p for p in papers if get_paper_key(p) not in sent]
+
+    # Allow repeat after N days
+    cutoff = datetime.now() - timedelta(days=days_to_check)
     unsent = []
     for paper in papers:
         key = get_paper_key(paper)
@@ -99,7 +118,7 @@ def filter_unsent_papers(papers: list[dict], days_to_check: int = 7) -> list[dic
         else:
             sent_date = datetime.fromisoformat(sent[key])
             if sent_date <= cutoff:
-                unsent.append(paper)  # Old enough to show again
+                unsent.append(paper)
 
     return unsent
 
