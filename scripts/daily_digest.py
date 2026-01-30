@@ -19,7 +19,7 @@ from rich.console import Console
 from paperpulse.collectors import ArxivCollector, PubMedCollector
 from paperpulse.email import DigestRenderer, DigestService, ResearchInterest
 from paperpulse.email.models import SuggestedAuthor
-from paperpulse import profile, history
+from paperpulse import profile, history, feedback
 
 console = Console()
 
@@ -205,6 +205,21 @@ async def send_daily_digest(user_email: str):
         SuggestedAuthor(name=author, paper_count=count, sample_paper=author_papers.get(author))
         for author, count in suggested
     ]
+
+    # Set feedback URL
+    digest.feedback_base_url = os.environ.get("FEEDBACK_URL", "http://localhost:8765")
+
+    # Generate feedback tokens for each paper
+    for section in digest.sections:
+        for paper in section.papers:
+            paper_dict = {
+                "title": paper.title,
+                "url": paper.url,
+                "doi": paper.doi,
+                "relevance_score": paper.relevance_score,
+            }
+            paper_id = feedback.register_paper(paper_dict)
+            paper.feedback_token = feedback.generate_token(paper_id)
 
     console.print(f"[green]Digest: {digest.total_papers} papers across {len(digest.sections)} sections[/green]")
 

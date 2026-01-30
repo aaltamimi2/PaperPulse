@@ -26,6 +26,9 @@ class DigestPaper:
     why_relevant: Optional[str] = None  # "Why this matters" explanation
     relevance_tags: list[str] = field(default_factory=list)  # Auto-generated tags
 
+    # Feedback tracking
+    feedback_token: Optional[str] = None  # Token for feedback links
+
     @property
     def authors_display(self) -> str:
         """Format authors for display."""
@@ -101,6 +104,9 @@ class Digest:
     # Author tracking
     followed_authors: list[str] = field(default_factory=list)
     suggested_authors: list[SuggestedAuthor] = field(default_factory=list)
+
+    # Feedback tracking
+    feedback_base_url: Optional[str] = None  # Base URL for feedback server
 
     @property
     def has_content(self) -> bool:

@@ -305,6 +305,49 @@ DIGEST_HTML_TEMPLATE = """
         .paper-cta:hover {
             background: #4338ca;
         }
+        .paper-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 14px;
+            flex-wrap: wrap;
+        }
+        .feedback-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .btn-read, .btn-up, .btn-down {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .btn-read {
+            background: #f1f5f9;
+            color: #475569;
+        }
+        .btn-read:hover {
+            background: #e2e8f0;
+        }
+        .btn-up {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .btn-up:hover {
+            background: #bbf7d0;
+        }
+        .btn-down {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .btn-down:hover {
+            background: #fecaca;
+        }
         .authors-section {
             padding: 24px 30px;
             background: #f8fafc;
@@ -526,9 +569,24 @@ DIGEST_HTML_TEMPLATE = """
                         </div>
                         {% endif %}
 
-                        <a href="{{ paper.url }}" class="paper-cta">
-                            Read Paper →
-                        </a>
+                        <div class="paper-actions">
+                            <a href="{{ paper.url }}" class="paper-cta">
+                                Read Paper →
+                            </a>
+                            {% if paper.feedback_token and feedback_base_url %}
+                            <div class="feedback-buttons">
+                                <a href="{{ feedback_base_url }}/read/{{ paper.feedback_token }}?redirect={{ paper.url | urlencode }}" class="btn-read" title="Mark as read">
+                                    ✓ Read
+                                </a>
+                                <a href="{{ feedback_base_url }}/rate/{{ paper.feedback_token }}/up" class="btn-up" title="More like this">
+                                    👍
+                                </a>
+                                <a href="{{ feedback_base_url }}/rate/{{ paper.feedback_token }}/down" class="btn-down" title="Less like this">
+                                    👎
+                                </a>
+                            </div>
+                            {% endif %}
+                        </div>
                     </div>
                     {% endfor %}
                 {% else %}
@@ -1002,7 +1060,7 @@ class DigestRenderer:
             template = env.from_string(ALERT_HTML_TEMPLATE)
         else:
             template = env.from_string(DIGEST_HTML_TEMPLATE)
-        return template.render(digest=digest)
+        return template.render(digest=digest, feedback_base_url=digest.feedback_base_url)
 
     def render_text(self, digest: Digest) -> str:
         """Render digest as plain text email.
